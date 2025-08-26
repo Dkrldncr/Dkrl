@@ -115,14 +115,15 @@ def render_question_image(q: Dict, out_path: str) -> str:
     return out_path
 
 
-def make_reel_for_question(q: Dict, duration_seconds: int = 6, out_video_path: Optional[str] = None) -> str:
-    # Resmi üret
+def make_reel_for_question_return_paths(q: Dict, duration_seconds: int = 6, out_video_path: Optional[str] = None) -> (str, str):
+    """
+    Video ve görseli üretir ve (video_path, image_path) olarak döner.
+    """
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     fname = f"reel_{q['id']}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
     img_path = os.path.join(OUTPUT_DIR, f"{fname}.jpg")
     render_question_image(q, img_path)
 
-    # Videoya dönüştür
     clip = ImageClip(img_path).set_duration(duration_seconds)
     clip = clip.resize(width=1080)
 
@@ -138,10 +139,14 @@ def make_reel_for_question(q: Dict, duration_seconds: int = 6, out_video_path: O
             logger=None,
         )
     except Exception as exc:
-        # ffmpeg yoksa veya codec sorunu: çağıran taraf bilsin diye hatayı ilet
         raise RuntimeError(f"Video yazma hatası: {exc}")
 
-    return out_video_path
+    return out_video_path, img_path
+
+
+def make_reel_for_question(q: Dict, duration_seconds: int = 6, out_video_path: Optional[str] = None) -> str:
+    video_path, _img_path = make_reel_for_question_return_paths(q, duration_seconds, out_video_path)
+    return video_path
 
 
 if __name__ == "__main__":

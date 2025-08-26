@@ -16,6 +16,8 @@ from typing import Optional
 from fetch_questions import fetch_and_store_all
 from make_reel import pick_unused_question, make_reel_for_question, mark_used
 from post_reel import upload_reel
+from post_reel import upload_story_with_interaction
+from make_reel import make_reel_for_question_return_paths
 
 
 def _build_caption(q: dict) -> str:
@@ -23,6 +25,18 @@ def _build_caption(q: dict) -> str:
     options = [o for o in options if o]
     lines = [q.get("question", "")] + [f"{chr(65 + i)}) {opt}" for i, opt in enumerate(options)]
     return "\n".join(lines)
+
+
+def _build_story_params(q: dict):
+    question_text = q.get("question", "")
+    options = [o for o in [q.get("option_a"), q.get("option_b"), q.get("option_c"), q.get("option_d")] if o]
+    correct_letter = (q.get("correct") or "").strip().upper()
+    correct_index = None
+    if correct_letter in {"A", "B", "C", "D"}:
+        idx = ord(correct_letter) - ord("A")
+        if 0 <= idx < len(options):
+            correct_index = idx
+    return question_text, options, correct_index
 
 
 def run_once() -> Optional[str]:
@@ -40,7 +54,7 @@ def run_once() -> Optional[str]:
 
     # 3 - Reel oluştur
     try:
-        video_path = make_reel_for_question(q)
+        video_path, image_path = make_reel_for_question_return_paths(q)
     except Exception as e:
         print("Make reel error:", e)
         return None
@@ -59,6 +73,20 @@ def run_once() -> Optional[str]:
             mark_used(q["id"])
         except Exception as e:
             print("Mark used error:", e)
+
+        # 7 - Story (quiz/poll) paylaşımı
+        try:
+            question_text, options, correct_index = _build_story_params(q)
+            story_caption = None  # Görüntü üzerinde zaten metin var; isterseniz caption ekleyin
+            upload_story_with_interaction(
+                image_path=image_path,
+                question_text=question_text,
+                options=options,
+                correct_index=correct_index,
+                caption=story_caption,
+            )
+        except Exception as e:
+            print("Story upload error:", e)
 
     return video_path
 

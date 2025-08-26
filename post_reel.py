@@ -70,6 +70,80 @@ def upload_reel(video_path: str, caption: Optional[str] = None) -> None:
             pass
 
 
+def upload_story_with_interaction(image_path: str, question_text: str, options: list, correct_index: Optional[int] = None, caption: Optional[str] = None) -> None:
+    """
+    Story yükler ve mümkünse quiz/poll sticker ekler.
+    - correct_index verilirse StoryQuiz dener (2-4 seçenek)
+    - değilse (ve en az 2 seçenek varsa) StoryPoll dener
+    - sticker başarısız olursa normal story yükler (fallback)
+    """
+    if os.environ.get("DRY_RUN") == "1":
+        print(f"[DRY_RUN] Story yükleme atlandı. Görsel: {image_path}\nSoru: {question_text}\nSeçenekler: {options}\nCaption: {caption}")
+        return
+
+    if not USERNAME or not PASSWORD:
+        raise ValueError("IG_USERNAME ve IG_PASSWORD çevre değişkenlerini tanımlayın.")
+
+    if not os.path.exists(image_path):
+        raise FileNotFoundError(f"Görsel dosyası bulunamadı: {image_path}")
+
+    from instagrapi import Client
+
+    cl = Client()
+
+    # Varsa önceki oturum ayarlarını yükle
+    if os.path.exists(SESSION_PATH):
+        try:
+            with open(SESSION_PATH, "r", encoding="utf-8") as f:
+                settings = json.load(f)
+            cl.set_settings(settings)
+        except Exception:
+            pass
+
+    cl.login(USERNAME, PASSWORD)
+
+    # Başarılı girişten sonra güncel oturum ayarlarını kaydet
+    try:
+        _ensure_file_dir(SESSION_PATH)
+        with open(SESSION_PATH, "w", encoding="utf-8") as f:
+            json.dump(cl.get_settings(), f)
+    except Exception:
+        pass
+
+    try:
+        sticker = None
+        try:
+            from instagrapi.types import StorySticker, StoryQuiz, StoryPoll
+            if isinstance(correct_index, int) and 0 <= correct_index < len(options) and 2 <= len(options) <= 4:
+                try:
+                    core = StoryQuiz(question=question_text, options=options, correct_answer=correct_index)
+                    sticker = StorySticker(sticker=core, x=0.5, y=0.78, width=0.85, height=0.22, rotation=0.0)
+                except Exception:
+                    sticker = None
+            if sticker is None and len(options) >= 2:
+                try:
+                    core = StoryPoll(question=question_text, options=options[:2])
+                    sticker = StorySticker(sticker=core, x=0.5, y=0.78, width=0.85, height=0.22, rotation=0.0)
+                except Exception:
+                    sticker = None
+        except Exception:
+            sticker = None
+
+        if sticker is not None:
+            media = cl.photo_upload_to_story(image_path, caption=caption, stickers=[sticker])
+        else:
+            media = cl.photo_upload_to_story(image_path, caption=caption)
+        print("Story yüklendi. media id:", getattr(media, "pk", None))
+    except Exception as e:
+        print("Story upload failed:", e)
+        raise
+    finally:
+        try:
+            cl.logout()
+        except Exception:
+            pass
+
+
 if __name__ == "__main__":
     import sys
 
